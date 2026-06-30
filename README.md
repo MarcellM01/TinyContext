@@ -4,19 +4,66 @@
 ![MCP Server](https://img.shields.io/badge/MCP-server-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-supported-009688)
 
-**Token-light memory for local AI agents.**
+**Context that fits your local LLMs.**
 
-TinyContext gives MCP agents a small, self-hosted memory layer: save concise facts
-and recall only the most relevant context within a token budget.
+TinyContext is a token-light memory layer for local AI agents. It helps agents
+save concise memories and recall only the context that earns its place in the
+prompt.
 
-No hosted dashboard. No account system. Just save -> rank -> recall.
+Most memory systems try to remember everything. TinyContext takes the opposite
+approach: remember what matters, rank it quickly, and return it under a strict
+token budget.
+
+No hosted dashboard. No account system. No giant context dumps. Just save ->
+rank -> recall.
+
+## Why TinyContext exists
+
+Local and smaller LLMs are useful, but they do not have unlimited room for
+history, notes, preferences, project decisions, and previous research. Dumping
+entire chat logs or oversized memory summaries into the prompt wastes tokens and
+makes weaker models worse, not better.
+
+TinyContext is built around one idea:
+
+> Every memory has a cost. TinyContext only recalls what earns its place.
+
+It is not trying to be a full agent platform, enterprise knowledge graph, or
+hosted memory cloud. It is a small MCP-native context layer for agents that need
+to remember without bloating the prompt.
 
 ## Why people use it
 
 - Add durable session memory to Cursor, Cline, Roo Code, Claude Desktop, or any MCP client.
 - Keep recalled context small enough for local LLM windows.
 - Store memories in a local SQLite database you control.
+- Recall by relevance instead of dumping entire history into the model.
+- Put a hard token budget around memory retrieval.
 - Use MCP as the primary interface, with an optional HTTP API for debugging.
+
+## Philosophy
+
+TinyContext is opinionated:
+
+- **Remember less, recall better.** Memory should improve the answer, not flood the model.
+- **Token budgets are a feature.** `max_tokens` is not an afterthought; it is the core interface.
+- **Local-first by default.** Your agent's memory should be inspectable, portable, and self-hosted.
+- **Context beats history.** The model does not need everything that happened. It needs the few things that matter now.
+- **Small models deserve good tools.** Memory should make local LLMs more useful without requiring huge context windows.
+
+## How it fits with TinySearch
+
+TinySearch finds fresh external context. TinyContext keeps the useful parts.
+
+Together, they form a simple token-light loop for local agents:
+
+```text
+search -> extract what matters -> remember -> recall under budget
+```
+
+TinySearch helps an agent look things up without burning context on irrelevant
+pages. TinyContext helps the agent avoid searching for the same useful facts over
+and over again.
 
 ## Quick start
 
@@ -53,8 +100,9 @@ recall_memories(query, session_id?, max_tokens?, top_k?)
 
 Typical routing:
 
-- Use `save_memories` when the agent learns a durable fact, preference, or note.
+- Use `save_memories` when the agent learns a durable fact, preference, project decision, or research note.
 - Use `recall_memories` before answering when prior context may help.
+- Keep `max_tokens` small by default. If memory cannot fit, it probably should not be recalled.
 
 ## How it works
 
@@ -68,6 +116,13 @@ flowchart LR
     E --> F[Token budget trim]
     F --> A
 ```
+
+The flow is intentionally simple:
+
+1. Save concise memories as plain text records.
+2. Rank candidate memories against the current query.
+3. Trim the result set to the requested token budget.
+4. Return only the context that should be added to the prompt.
 
 ## Run from source
 
@@ -100,6 +155,10 @@ uvicorn servers.fastapi_server:app --host 0.0.0.0 --port 8000
 
 ### `save_memories`
 
+Use this when an agent learns something durable enough to be useful later:
+preferences, project decisions, implementation notes, source findings, or
+constraints the user does not want to repeat.
+
 Request body:
 
 ```json
@@ -131,6 +190,9 @@ Response:
 ```
 
 ### `recall_memories`
+
+Use this when previous context may help the current answer. The `max_tokens`
+parameter controls how much memory is allowed back into the prompt.
 
 Request body:
 
